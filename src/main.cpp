@@ -1,29 +1,42 @@
 #include <Arduino.h>
+#include <Arduino.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-// ===== OLED SETTINGS =====
+// ===== OLED =====
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// ===== ULTRASONIC PINS =====
+// ===== ULTRASONIC =====
 #define TRIG_PIN 5
 #define ECHO_PIN 18
 
-// ===== Emotion System =====
-enum Mood { NEUTRAL, HAPPY, ANGRY, SAD };
-Mood currentMood = NEUTRAL;
+// ===== EMOTIONS =====
+enum Emotion {
+  NEUTRAL,
+  SKEPTIC,
+  SAD,
+  BROKEN,
+  TIRED,
+  CRAZY,
+  WINK,
+  SURPRISED,
+  ANGRY,
+  INLOVE,
+  HAPPY,
+  DENYING,
+  TOTAL_EMOTIONS
+};
 
-unsigned long lastInteraction = 0;
+Emotion currentEmotion = NEUTRAL;
 
-// ===== Eye Settings =====
-int baseY = 16;
-int eyeHeight = 36;
+long lastDistance = 0;
+unsigned long lastSwitch = 0;
 
-// ===== Distance Function =====
+// ===== READ DISTANCE =====
 long readDistanceCM() {
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(2);
@@ -33,90 +46,128 @@ long readDistanceCM() {
   digitalWrite(TRIG_PIN, LOW);
 
   long duration = pulseIn(ECHO_PIN, HIGH, 30000);
-
-  if (duration == 0) return -1; // no signal
-
-  long distance = duration * 0.034 / 2;
-  return distance;
+  return duration * 0.034 / 2;
 }
 
-// ===== Draw Face =====
-void drawSpiderEyes(Mood mood) {
+// ===== EYE HELPERS =====
+void eyeCircle(int x, int y, int r) {
+  display.fillCircle(x, y, r, WHITE);
+}
+
+void eyeLine(int x1, int y1, int x2, int y2) {
+  display.drawLine(x1, y1, x2, y2, WHITE);
+}
+
+// ===== DRAW EMOTIONS =====
+void drawFace(Emotion e) {
 
   display.clearDisplay();
 
-  int lx = 18;
-  int rx = 70;
-  int y  = baseY;
+  int lx = 40;
+  int rx = 88;
+  int y  = 32;
 
-  if (mood == NEUTRAL) {
-    display.fillRoundRect(lx, y, 40, eyeHeight, 20, WHITE);
-    display.fillRoundRect(rx, y, 40, eyeHeight, 20, WHITE);
-  }
-  else if (mood == HAPPY) {
-    display.fillTriangle(lx, y+15, lx+40, y+5, lx+20, y+eyeHeight, WHITE);
-    display.fillTriangle(rx+40, y+15, rx, y+5, rx+20, y+eyeHeight, WHITE);
-  }
-  else if (mood == ANGRY) {
-    display.fillTriangle(lx, y, lx+40, y+20, lx+20, y+eyeHeight, WHITE);
-    display.fillTriangle(rx+40, y, rx, y+20, rx+20, y+eyeHeight, WHITE);
-  }
-  else if (mood == SAD) {
-    display.fillTriangle(lx, y+20, lx+40, y+eyeHeight, lx+20, y, WHITE);
-    display.fillTriangle(rx+40, y+20, rx, y+eyeHeight, rx+20, y, WHITE);
+  switch (e) {
+
+    case NEUTRAL:
+      eyeCircle(lx, y, 8);
+      eyeCircle(rx, y, 8);
+      break;
+
+    case HAPPY:
+      display.fillCircle(lx, y, 8, WHITE);
+      display.fillCircle(rx, y, 8, WHITE);
+      display.fillCircle(lx, y-3, 8, BLACK);
+      display.fillCircle(rx, y-3, 8, BLACK);
+      break;
+
+    case SAD:
+      display.fillCircle(lx, y, 8, WHITE);
+      display.fillCircle(rx, y, 8, WHITE);
+      display.fillCircle(lx, y+4, 8, BLACK);
+      display.fillCircle(rx, y+4, 8, BLACK);
+      break;
+
+    case ANGRY:
+      eyeLine(lx-8, y-6, lx+8, y+2);
+      eyeLine(rx+8, y-6, rx-8, y+2);
+      break;
+
+    case SURPRISED:
+      display.drawCircle(lx, y, 8, WHITE);
+      display.drawCircle(rx, y, 8, WHITE);
+      break;
+
+    case WINK:
+      eyeCircle(lx, y, 8);
+      eyeLine(rx-8, y, rx+8, y);
+      break;
+
+    case TIRED:
+      eyeLine(lx-8, y, lx+8, y);
+      eyeLine(rx-8, y, rx+8, y);
+      break;
+
+    case SKEPTIC:
+      eyeCircle(lx, y, 8);
+      eyeLine(rx-8, y-4, rx+8, y-4);
+      break;
+
+    case CRAZY:
+      display.drawCircle(lx, y, 8, WHITE);
+      eyeCircle(rx, y, 3);
+      break;
+
+    case INLOVE:
+      display.fillTriangle(lx-5,y-2,lx+5,y-2,lx,y+6,WHITE);
+      display.fillTriangle(rx-5,y-2,rx+5,y-2,rx,y+6,WHITE);
+      break;
+
+    case BROKEN:
+      eyeLine(lx-6,y-6,lx+6,y+6);
+      eyeLine(lx+6,y-6,lx-6,y+6);
+      eyeLine(rx-6,y-6,rx+6,y+6);
+      eyeLine(rx+6,y-6,rx-6,y+6);
+      break;
+
+    case DENYING:
+      eyeLine(lx-8, y, lx+8, y);
+      eyeLine(rx-8, y, rx+8, y);
+      display.drawLine(30,50,98,50,WHITE);
+      break;
   }
 
   display.display();
 }
 
-// ===== Behavior =====
-void updateEmotion() {
-
-  long distance = readDistanceCM();
-
-  Serial.print("Distance: ");
-  Serial.println(distance);
-
-  // VERY CLOSE → HAPPY
-  if (distance > 0 && distance < 10) {
-    currentMood = HAPPY;
-    lastInteraction = millis();
-  }
-  // MEDIUM → SAD
-  else if (distance >= 10 && distance < 40) {
-    currentMood = SAD;
-    lastInteraction = millis();
-  }
-  // FAR / NOTHING → ANGRY
-  else {
-    currentMood = ANGRY;
-  }
-}
-
-// ===== Setup =====
+// ===== SETUP =====
 void setup() {
 
   Serial.begin(115200);
-
-  Wire.begin(21, 22);  // SDA, SCL
+  Wire.begin(21, 22);
 
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
 
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println("SSD1306 failed");
-    while (true);
-  }
-
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   display.clearDisplay();
   display.display();
-
-  lastInteraction = millis();
 }
 
-// ===== Main Loop =====
+// ===== LOOP =====
 void loop() {
-  updateEmotion();
-  drawSpiderEyes(currentMood);
-  delay(120);
+
+  long distance = readDistanceCM();
+
+  if (abs(distance - lastDistance) > 4 && millis() - lastSwitch > 500) {
+    currentEmotion = (Emotion)((currentEmotion + 1) % TOTAL_EMOTIONS);
+    lastSwitch = millis();
+  }
+
+  lastDistance = distance;
+
+  drawFace(currentEmotion);
+  delay(60);
 }
+
+
