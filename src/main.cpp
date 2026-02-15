@@ -18,7 +18,6 @@ enum Mood { NEUTRAL, HAPPY, ANGRY, SAD };
 Mood currentMood = NEUTRAL;
 
 unsigned long lastInteraction = 0;
-const unsigned long lonelyTime = 15000;
 
 // ===== Eye Settings =====
 int baseY = 16;
@@ -34,6 +33,9 @@ long readDistanceCM() {
   digitalWrite(TRIG_PIN, LOW);
 
   long duration = pulseIn(ECHO_PIN, HIGH, 30000);
+
+  if (duration == 0) return -1; // no signal
+
   long distance = duration * 0.034 / 2;
   return distance;
 }
@@ -71,22 +73,23 @@ void drawSpiderEyes(Mood mood) {
 void updateEmotion() {
 
   long distance = readDistanceCM();
+
   Serial.print("Distance: ");
   Serial.println(distance);
 
-  if (distance > 0 && distance < 12) {
-    currentMood = ANGRY;        // hand close
+  // VERY CLOSE → HAPPY
+  if (distance > 0 && distance < 10) {
+    currentMood = HAPPY;
     lastInteraction = millis();
   }
-  else if (distance >= 12 && distance < 80) {
-    currentMood = HAPPY;        // hand away
-    lastInteraction = millis();
-  }
-  else if (millis() - lastInteraction > lonelyTime) {
+  // MEDIUM → SAD
+  else if (distance >= 10 && distance < 40) {
     currentMood = SAD;
+    lastInteraction = millis();
   }
+  // FAR / NOTHING → ANGRY
   else {
-    currentMood = NEUTRAL;
+    currentMood = ANGRY;
   }
 }
 
@@ -117,4 +120,3 @@ void loop() {
   drawSpiderEyes(currentMood);
   delay(120);
 }
-
