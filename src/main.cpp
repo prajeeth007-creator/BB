@@ -27,32 +27,31 @@ enum Emotion {
 };
 
 Emotion currentEmotion = NEUTRAL;
+Emotion previousEmotion = NEUTRAL;
 
 // ===== TRIGGER SYSTEM =====
 bool handDetected = false;
-const int triggerDistance = 10;   // cm
+const int triggerDistance = 10;
 
 // ===== READ DISTANCE =====
 long readDistanceCM() {
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(2);
-
   digitalWrite(TRIG_PIN, HIGH);
   delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
-
   long duration = pulseIn(ECHO_PIN, HIGH, 30000);
   return duration * 0.034 / 2;
 }
 
-// ===== BOLD CIRCLE =====
+// ===== BOLD EYES =====
 void fillBoldCircle(int x, int y, int r) {
   display.fillCircle(x, y, r, WHITE);
   display.drawCircle(x, y, r, WHITE);
   display.drawCircle(x, y, r-1, WHITE);
 }
 
-// ===== CINEMATIC BLINK =====
+// ===== BLINK =====
 void cinematicBlink() {
   int lx = 36;
   int rx = 92;
@@ -67,28 +66,27 @@ void cinematicBlink() {
   }
 }
 
-// ===== EASE FUNCTION =====
+// ===== EASE =====
 float easeInOut(float t) {
   return t * t * (3 - 2 * t);
 }
 
-// ===== ANIMATE EYES =====
-void animateEyes(int startOffset, int endOffset, int frames = 12) {
+// ===== ANIMATE EYES ONCE =====
+void animateEyes(int startOffset, int endOffset) {
 
   int lx = 36;
   int rx = 92;
   int y  = 32;
   int r  = 18;
 
-  for (int i = 0; i <= frames; i++) {
+  for (int i = 0; i <= 12; i++) {
 
-    float t = (float)i / frames;
+    float t = (float)i / 12.0;
     float e = easeInOut(t);
 
     int offset = startOffset + (endOffset - startOffset) * e;
 
     display.clearDisplay();
-
     fillBoldCircle(lx, y, r);
     fillBoldCircle(rx, y, r);
 
@@ -100,8 +98,8 @@ void animateEyes(int startOffset, int endOffset, int frames = 12) {
   }
 }
 
-// ===== DRAW STATIC EXPRESSIONS =====
-void drawFace(Emotion e) {
+// ===== DRAW STATIC FACE =====
+void drawStaticFace(Emotion e) {
 
   display.clearDisplay();
 
@@ -118,12 +116,14 @@ void drawFace(Emotion e) {
       break;
 
     case HAPPY:
-      animateEyes(0, -6);
-      return;
+      fillBoldCircle(lx, y-6, r);
+      fillBoldCircle(rx, y-6, r);
+      break;
 
     case SAD:
-      animateEyes(0, 8);
-      return;
+      fillBoldCircle(lx, y+8, r);
+      fillBoldCircle(rx, y+8, r);
+      break;
 
     case ANGRY:
       display.drawLine(lx-18, y-12, lx+18, y+4, WHITE);
@@ -133,8 +133,6 @@ void drawFace(Emotion e) {
     case SURPRISED:
       display.drawCircle(lx, y, r, WHITE);
       display.drawCircle(rx, y, r, WHITE);
-      display.drawCircle(lx, y, r-1, WHITE);
-      display.drawCircle(rx, y, r-1, WHITE);
       break;
 
     case WINK:
@@ -156,6 +154,14 @@ void drawFace(Emotion e) {
   display.display();
 }
 
+// ===== EMOTION TRANSITION =====
+void playTransition(Emotion e) {
+  cinematicBlink();
+
+  if (e == HAPPY) animateEyes(0, -6);
+  else if (e == SAD) animateEyes(0, 8);
+}
+
 // ===== SETUP =====
 void setup() {
 
@@ -174,19 +180,19 @@ void setup() {
 void loop() {
 
   long distance = readDistanceCM();
-  Serial.println(distance);
 
   if (distance > 0 && distance < triggerDistance && !handDetected) {
     handDetected = true;
-    cinematicBlink();
+    previousEmotion = currentEmotion;
     currentEmotion = (Emotion)((currentEmotion + 1) % TOTAL_EMOTIONS);
+    playTransition(currentEmotion);
   }
 
   if (distance >= triggerDistance + 5) {
     handDetected = false;
   }
 
-  drawFace(currentEmotion);
+  drawStaticFace(currentEmotion);
   delay(40);
 }
 
