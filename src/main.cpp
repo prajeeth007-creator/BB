@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include <Arduino.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -17,24 +16,21 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 // ===== EMOTIONS =====
 enum Emotion {
   NEUTRAL,
-  SKEPTIC,
-  SAD,
-  BROKEN,
-  TIRED,
-  CRAZY,
-  WINK,
-  SURPRISED,
-  ANGRY,
-  INLOVE,
   HAPPY,
-  DENYING,
+  SAD,
+  ANGRY,
+  SURPRISED,
+  WINK,
+  TIRED,
+  INLOVE,
   TOTAL_EMOTIONS
 };
 
 Emotion currentEmotion = NEUTRAL;
 
-long lastDistance = 0;
-unsigned long lastSwitch = 0;
+// ===== TRIGGER SYSTEM =====
+bool handDetected = false;
+const int triggerDistance = 10;   // cm
 
 // ===== READ DISTANCE =====
 long readDistanceCM() {
@@ -49,91 +45,60 @@ long readDistanceCM() {
   return duration * 0.034 / 2;
 }
 
-// ===== EYE HELPERS =====
-void eyeCircle(int x, int y, int r) {
-  display.fillCircle(x, y, r, WHITE);
-}
-
-void eyeLine(int x1, int y1, int x2, int y2) {
-  display.drawLine(x1, y1, x2, y2, WHITE);
-}
-
-// ===== DRAW EMOTIONS =====
+// ===== DRAW BIG CUTE EYES =====
 void drawFace(Emotion e) {
 
   display.clearDisplay();
 
-  int lx = 40;
-  int rx = 88;
+  int lx = 36;
+  int rx = 92;
   int y  = 32;
+  int r  = 14;
 
   switch (e) {
 
     case NEUTRAL:
-      eyeCircle(lx, y, 8);
-      eyeCircle(rx, y, 8);
+      display.fillCircle(lx, y, r, WHITE);
+      display.fillCircle(rx, y, r, WHITE);
       break;
 
     case HAPPY:
-      display.fillCircle(lx, y, 8, WHITE);
-      display.fillCircle(rx, y, 8, WHITE);
-      display.fillCircle(lx, y-3, 8, BLACK);
-      display.fillCircle(rx, y-3, 8, BLACK);
+      display.fillCircle(lx, y, r, WHITE);
+      display.fillCircle(rx, y, r, WHITE);
+      display.fillCircle(lx, y-6, r, BLACK);
+      display.fillCircle(rx, y-6, r, BLACK);
       break;
 
     case SAD:
-      display.fillCircle(lx, y, 8, WHITE);
-      display.fillCircle(rx, y, 8, WHITE);
-      display.fillCircle(lx, y+4, 8, BLACK);
-      display.fillCircle(rx, y+4, 8, BLACK);
+      display.fillCircle(lx, y, r, WHITE);
+      display.fillCircle(rx, y, r, WHITE);
+      display.fillCircle(lx, y+8, r, BLACK);
+      display.fillCircle(rx, y+8, r, BLACK);
       break;
 
     case ANGRY:
-      eyeLine(lx-8, y-6, lx+8, y+2);
-      eyeLine(rx+8, y-6, rx-8, y+2);
+      display.drawLine(lx-14, y-10, lx+14, y+2, WHITE);
+      display.drawLine(rx+14, y-10, rx-14, y+2, WHITE);
       break;
 
     case SURPRISED:
-      display.drawCircle(lx, y, 8, WHITE);
-      display.drawCircle(rx, y, 8, WHITE);
+      display.drawCircle(lx, y, r, WHITE);
+      display.drawCircle(rx, y, r, WHITE);
       break;
 
     case WINK:
-      eyeCircle(lx, y, 8);
-      eyeLine(rx-8, y, rx+8, y);
+      display.fillCircle(lx, y, r, WHITE);
+      display.drawLine(rx-14, y, rx+14, y, WHITE);
       break;
 
     case TIRED:
-      eyeLine(lx-8, y, lx+8, y);
-      eyeLine(rx-8, y, rx+8, y);
-      break;
-
-    case SKEPTIC:
-      eyeCircle(lx, y, 8);
-      eyeLine(rx-8, y-4, rx+8, y-4);
-      break;
-
-    case CRAZY:
-      display.drawCircle(lx, y, 8, WHITE);
-      eyeCircle(rx, y, 3);
+      display.drawLine(lx-14, y, lx+14, y, WHITE);
+      display.drawLine(rx-14, y, rx+14, y, WHITE);
       break;
 
     case INLOVE:
-      display.fillTriangle(lx-5,y-2,lx+5,y-2,lx,y+6,WHITE);
-      display.fillTriangle(rx-5,y-2,rx+5,y-2,rx,y+6,WHITE);
-      break;
-
-    case BROKEN:
-      eyeLine(lx-6,y-6,lx+6,y+6);
-      eyeLine(lx+6,y-6,lx-6,y+6);
-      eyeLine(rx-6,y-6,rx+6,y+6);
-      eyeLine(rx+6,y-6,rx-6,y+6);
-      break;
-
-    case DENYING:
-      eyeLine(lx-8, y, lx+8, y);
-      eyeLine(rx-8, y, rx+8, y);
-      display.drawLine(30,50,98,50,WHITE);
+      display.fillTriangle(lx-8,y-2,lx+8,y-2,lx,y+10,WHITE);
+      display.fillTriangle(rx-8,y-2,rx+8,y-2,rx,y+10,WHITE);
       break;
   }
 
@@ -158,16 +123,21 @@ void setup() {
 void loop() {
 
   long distance = readDistanceCM();
+  Serial.println(distance);
 
-  if (abs(distance - lastDistance) > 4 && millis() - lastSwitch > 500) {
+  // Hand comes close → trigger ONCE
+  if (distance > 0 && distance < triggerDistance && !handDetected) {
+    handDetected = true;
     currentEmotion = (Emotion)((currentEmotion + 1) % TOTAL_EMOTIONS);
-    lastSwitch = millis();
   }
 
-  lastDistance = distance;
+  // Hand removed → reset trigger
+  if (distance >= triggerDistance + 5) {
+    handDetected = false;
+  }
 
   drawFace(currentEmotion);
-  delay(60);
+  delay(80);
 }
 
 
